@@ -1,0 +1,281 @@
+# Curated warehouse docs for the text-to-SQL agent.
+# Cost is a scaled anonymised unit. Never treat it as currency.
+# Prefer spend_share and cpa_index from segment_economics.
+#
+# LABEL COLUMNS (not quantities): unit, campaign, uid, conversion_id, journey_id,
+# cat1–cat9. CAST to VARCHAR when selecting. Never SUM/AVG them or read the
+# digits as a magnitude (segment 16022563 is a name, not "16 million").
+
+tables:
+  impressions:
+    grain: one displayed ad impression
+    join_keys: [uid, campaign, conversion_id, timestamp]
+    columns:
+      timestamp: {type: BIGINT, desc: seconds from dataset start (0 = first row)}
+      uid: {type: LABEL, desc: "categorical user label; CAST to VARCHAR; never treat digits as a quantity"}
+      campaign: {type: LABEL, desc: "categorical campaign label; CAST to VARCHAR; never SUM or compare as a number"}
+      conversion: {type: INTEGER, desc: display-level conversion FLAG (1 if a conversion follows within 30 days); not advertiser credit}
+      conversion_timestamp: {type: BIGINT, desc: conversion time or -1}
+      conversion_id: {type: LABEL, desc: "categorical conversion label or -1; CAST to VARCHAR"}
+      attribution: {type: INTEGER, desc: 1 if the advertiser credited Criteo}
+      click: {type: INTEGER, desc: 1 if the impression was clicked}
+      click_pos: {type: INTEGER, desc: click position before conversion, or -1}
+      click_nb: {type: INTEGER, desc: number of clicks before conversion, or -1}
+      cost: {type: DOUBLE, desc: scaled anonymised cost; not currency; do not sum into rupees}
+      cpo: {type: DOUBLE, desc: scaled cost-per-order; not currency}
+      time_since_last_click: {type: BIGINT, desc: seconds since last click, or -1}
+      cat1: {type: BIGINT, desc: anonymised context feature}
+      cat2: {type: BIGINT, desc: anonymised context feature}
+      cat3: {type: BIGINT, desc: anonymised context feature}
+      cat4: {type: BIGINT, desc: anonymised context feature}
+      cat5: {type: BIGINT, desc: anonymised context feature}
+      cat6: {type: BIGINT, desc: anonymised context feature}
+      cat7: {type: BIGINT, desc: anonymised context feature}
+      cat8: {type: BIGINT, desc: anonymised context feature}
+      cat9: {type: BIGINT, desc: anonymised context feature used to build contextual segments}
+
+  impressions_unit:
+    grain: one impression plus its contextual segment label
+    join_keys: [uid, campaign, conversion_id, unit]
+    columns:
+      unit: {type: LABEL, desc: "contextual segment label (cat9 bucket); CAST to VARCHAR; not a quantity"}
+      timestamp: {type: BIGINT, desc: seconds from dataset start}
+      uid: {type: BIGINT, desc: user id}
+      campaign: {type: BIGINT, desc: campaign id}
+      conversion: {type: INTEGER, desc: 1 if conversion within 30 days}
+      conversion_id: {type: BIGINT, desc: conversion key or -1}
+      attribution: {type: INTEGER, desc: advertiser credited Criteo}
+      click: {type: INTEGER, desc: clicked}
+      cost: {type: DOUBLE, desc: scaled cost; not currency}
+
+  journeys_converting:
+    grain: one touchpoint on a converting journey (clicks only in this dump)
+    join_keys: [conversion_id, unit]
+    columns:
+      journey_id: {type: VARCHAR, desc: same as conversion_id as text}
+      conversion_id: {type: BIGINT, desc: converting journey key}
+      uid: {type: BIGINT, desc: user id}
+      campaign: {type: BIGINT, desc: campaign id}
+      conversion_timestamp: {type: BIGINT, desc: conversion time}
+      attribution: {type: INTEGER, desc: 1 if this touch is advertiser-credited}
+      click: {type: INTEGER, desc: always 1 on this table}
+      cost: {type: DOUBLE, desc: scaled cost of this touch}
+      timestamp: {type: BIGINT, desc: impression time}
+      unit: {type: LABEL, desc: "contextual segment label; CAST to VARCHAR; never treat digits as a quantity"}
+      touch_index: {type: BIGINT, desc: 1 = first touch}
+      touch_count: {type: BIGINT, desc: touches in this journey}
+      is_first: {type: INTEGER, desc: 1 if first touch}
+      is_last: {type: INTEGER, desc: 1 if last touch}
+      recency_bucket: {type: VARCHAR, desc: time from impression to conversion; descriptive only}
+
+  conversion_flags:
+    grain: one converting journey
+    join_keys: [conversion_id]
+    columns:
+      conversion_id: {type: BIGINT, desc: journey key}
+      touch_count: {type: BIGINT, desc: touches on the journey}
+      is_advertiser_credited: {type: INTEGER, desc: 1 if any touch has attribution=1; NOT the display conversion flag (that is impressions.conversion)}
+
+  attr_linear:
+    grain: conversion_id x contextual segment
+    join_keys: [conversion_id, unit]
+    columns:
+      conversion_id: {type: BIGINT, desc: journey key}
+      unit: {type: LABEL, desc: "contextual segment label; CAST to VARCHAR; never treat digits as a quantity"}
+      credit: {type: DOUBLE, desc: linear credit; sums to 1 per conversion_id}
+
+  attr_last_touch:
+    grain: conversion_id x contextual segment
+    join_keys: [conversion_id, unit]
+    columns:
+      conversion_id: {type: BIGINT, desc: journey key}
+      unit: {type: LABEL, desc: "contextual segment label; CAST to VARCHAR; never treat digits as a quantity"}
+      credit: {type: DOUBLE, desc: last-touch credit; 1 on the last unit, 0 elsewhere}
+
+  attr_first_touch:
+    grain: conversion_id x contextual segment
+    join_keys: [conversion_id, unit]
+    columns:
+      conversion_id: {type: BIGINT, desc: journey key}
+      unit: {type: LABEL, desc: "contextual segment label; CAST to VARCHAR; never treat digits as a quantity"}
+      credit: {type: DOUBLE, desc: first-touch credit}
+
+  attr_position:
+    grain: conversion_id x contextual segment
+    join_keys: [conversion_id, unit]
+    columns:
+      conversion_id: {type: BIGINT, desc: journey key}
+      unit: {type: LABEL, desc: "contextual segment label; CAST to VARCHAR; never treat digits as a quantity"}
+      credit: {type: DOUBLE, desc: position-based 40/20/40 credit}
+
+  attr_by_unit:
+    grain: scope x model x unit
+    join_keys: [unit]
+    columns:
+      scope: {type: VARCHAR, desc: all or multi_touch}
+      model: {type: VARCHAR, desc: first_touch, last_touch, linear, position}
+      unit: {type: LABEL, desc: "contextual segment label; CAST to VARCHAR; never treat digits as a quantity"}
+      attributed_conversions: {type: DOUBLE, desc: sum of credit}
+
+  attr_compare:
+    grain: scope x unit
+    join_keys: [unit]
+    columns:
+      scope: {type: VARCHAR, desc: all or multi_touch}
+      unit: {type: LABEL, desc: "contextual segment label; CAST to VARCHAR; never treat digits as a quantity"}
+      first_credit: {type: DOUBLE, desc: first-touch attributed conversions}
+      last_credit: {type: DOUBLE, desc: last-touch attributed conversions}
+      linear_credit: {type: DOUBLE, desc: linear attributed conversions}
+      position_credit: {type: DOUBLE, desc: position-based attributed conversions}
+      pct_diff_last_vs_linear: {type: DOUBLE, desc: (last-linear)/linear}
+      last_vs_linear_flag: {type: VARCHAR, desc: over_credited, under_credited, or within_10pct}
+
+  segment_economics:
+    grain: period x contextual segment
+    join_keys: [unit, period]
+    columns:
+      period: {type: VARCHAR, desc: full, days_1_15, or days_16_30}
+      unit: {type: LABEL, desc: "contextual segment label; CAST to VARCHAR; never treat digits as a quantity"}
+      n_impressions: {type: BIGINT, desc: impression count}
+      impression_share: {type: DOUBLE, desc: share of impressions}
+      spend_share: {type: DOUBLE, desc: share of scaled cost}
+      linear_conversions: {type: DOUBLE, desc: linear-attributed conversions}
+      last_conversions: {type: DOUBLE, desc: last-touch-attributed conversions}
+      adv_linear_conversions: {type: DOUBLE, desc: advertiser-credited conversions split by linear}
+      adv_last_conversions: {type: DOUBLE, desc: advertiser-credited conversions split by last-touch}
+      linear_conv_share: {type: DOUBLE, desc: share of linear conversions}
+      adv_linear_conv_share: {type: DOUBLE, desc: share of advertiser-credited linear conversions}
+      cpa_index_linear: {type: DOUBLE, desc: spend_share / linear_conv_share; 1 = average}
+      cpa_index_last: {type: DOUBLE, desc: spend_share / last conversion share}
+      cpa_index_adv_linear: {type: DOUBLE, desc: DEFAULT CPA — spend_share / advertiser-credited linear conversion share; Phase 1 primary}
+      cpa_index_adv_last: {type: DOUBLE, desc: relative CPA on advertiser-credited last-touch}
+      low_confidence_linear: {type: INTEGER, desc: 1 if linear conversions < 30}
+      low_confidence_adv_linear: {type: INTEGER, desc: 1 if advertiser linear conversions < 30}
+
+  advertiser_gap_overall:
+    grain: one row for the full converting set
+    join_keys: []
+    columns:
+      n_criteo_touched_conversions: {type: BIGINT, desc: converting journeys Criteo served}
+      n_advertiser_credited: {type: BIGINT, desc: journeys the advertiser credited to Criteo}
+      share_advertiser_credited: {type: DOUBLE, desc: credited / touched}
+
+  advertiser_gap_by_unit:
+    grain: last-touch contextual segment
+    join_keys: [unit]
+    columns:
+      unit: {type: VARCHAR, desc: last-touch contextual segment}
+      n_criteo_touched: {type: BIGINT, desc: conversions last-touched by this unit}
+      n_advertiser_credited: {type: BIGINT, desc: of those, advertiser-credited}
+      share_advertiser_credited: {type: DOUBLE, desc: credited share}
+      spend_share: {type: DOUBLE, desc: share of scaled spend}
+      cpa_index_advertiser_credited: {type: DOUBLE, desc: relative CPA using credited conversions}
+      cpa_index_criteo_touched: {type: DOUBLE, desc: relative CPA using all touched conversions}
+
+  reallocation_headline:
+    grain: one simulated outcome
+    join_keys: []
+    columns:
+      outcome: {type: VARCHAR, desc: PRIMARY or sensitivity label}
+      chosen_x: {type: DOUBLE, desc: share of spend shifted}
+      oos_uplift: {type: DOUBLE, desc: days 16-30 projected uplift}
+      insample_uplift: {type: DOUBLE, desc: days 1-15 projected uplift}
+      donors: {type: VARCHAR, desc: donor units}
+      receivers: {type: VARCHAR, desc: receiver units}
+
+  reallocation_plan:
+    grain: one unit in the primary plan
+    join_keys: [unit]
+    columns:
+      unit: {type: LABEL, desc: "contextual segment label; CAST to VARCHAR; never treat digits as a quantity"}
+      role: {type: VARCHAR, desc: donor or receiver}
+      chosen_x: {type: DOUBLE, desc: shift size}
+      spend_frac_change: {type: DOUBLE, desc: fraction of that unit's spend moved}
+
+  journey_length_distribution:
+    grain: one journey length
+    join_keys: []
+    columns:
+      touch_count: {type: BIGINT, desc: touches on the converting journey}
+      n_journeys: {type: BIGINT, desc: number of journeys of that length}
+      share: {type: DOUBLE, desc: share of converting journeys}
+
+  v_segment_cpa_default:
+    grain: period x contextual segment
+    join_keys: [unit, period]
+    columns:
+      period: {type: VARCHAR, desc: full, days_1_15, or days_16_30}
+      unit: {type: LABEL, desc: "contextual segment label; CAST to VARCHAR"}
+      cpa: {type: DOUBLE, desc: DEFAULT CPA (advertiser-credited x linear). Select this; do not recompute.}
+      spend_share: {type: DOUBLE, desc: share of scaled spend}
+      adv_linear_conv_share: {type: DOUBLE, desc: share of advertiser-credited linear conversions}
+      low_confidence_adv_linear: {type: INTEGER, desc: 1 if credited linear conversions < 30}
+
+  v_credit_rate_last_touch:
+    grain: last-touch contextual segment
+    join_keys: [unit]
+    columns:
+      unit: {type: LABEL, desc: last-touch contextual segment}
+      credit_rate: {type: DOUBLE, desc: DEFAULT advertiser credit rate (P1.7 last-touch allocation)}
+      n_journeys: {type: BIGINT, desc: converting journeys last-touched by this unit}
+
+  v_linear_last_by_unit:
+    grain: contextual segment (full book; all converting journeys)
+    join_keys: [unit]
+    columns:
+      unit: {type: LABEL, desc: contextual segment}
+      linear_credit: {type: DOUBLE, desc: even-split conversion credit, all conversions; do not join this view when the question filters path length or a subset of journeys}
+      last_credit: {type: DOUBLE, desc: last-click conversion credit, all conversions; same restriction}
+
+  v_view_click_spend:
+    grain: contextual segment
+    join_keys: [unit]
+    columns:
+      unit: {type: LABEL, desc: contextual segment}
+      view_spend: {type: DOUBLE, desc: scaled spend on unclicked displays}
+      click_spend: {type: DOUBLE, desc: scaled spend on clicked displays}
+      spend: {type: DOUBLE, desc: total scaled spend}
+      view_spend_share: {type: DOUBLE, desc: view_spend / spend}
+
+metrics:
+  CTR: clicks / impressions. Compute as SUM(click) / COUNT(*) (pooled). Never average per-row or per-segment CTRs.
+  CVR: conversions / clicks. Use COUNT(DISTINCT conversion_id) for conversions, SUM(click) for clicks.
+  CPA: "DEFAULT cost per conversion. Prefer v_segment_cpa_default.cpa (advertiser-credited x linear). Equivalent to segment_economics.cpa_index_adv_linear. Filter period = full unless a half is named. Never average CPA rows."
+  CPA_index: alias of CPA (the default above).
+  attribution_share: last or linear credit for a unit divided by total conversions.
+  advertiser_credited_share: n_advertiser_credited / n_criteo_touched_conversions.
+  last_vs_linear: (last_credit - linear_credit) / linear_credit. Scope defaults to all conversions unless the question says multi-touch.
+  advertiser_credit_rate: "DEFAULT: select v_credit_rate_last_touch.credit_rate (last-touch unit, P1.7)."
+
+labels:
+  - unit
+  - campaign
+  - uid
+  - conversion_id
+  - journey_id
+  - cat1
+  - cat2
+  - cat3
+  - cat4
+  - cat5
+  - cat6
+  - cat7
+  - cat8
+  - cat9
+
+pitfalls:
+  - IDs and unit/campaign/uid/conversion_id/cat* are categorical labels. CAST to VARCHAR. Never SUM, AVG, or narrate them as magnitudes.
+  - 'Average means the pooled book-level figure (sums over sums), never an unweighted mean of per-segment values. Same rule for CTR, credit rate, and CPA.'
+  - cost is scaled. Do not format as rupees or dollars.
+  - Converting journeys contain clicks only. Views have spend but no conversion_id.
+  - unit = 'other' is a long-tail bucket, not one buyable line item.
+  - Recency buckets are descriptive. Do not treat them as the attribution unit.
+  - Default CPA is advertiser-credited × linear (cpa_index_adv_linear). Do not switch to last-click or all-conversion linear unless the question says so.
+  - Prefer segment_economics for CPA questions. Filter period = 'full' unless asked about halves.
+  - For last vs linear over-credit headlines, exclude unit = 'other' unless asked. Scope is all conversions unless the question says multi-touch.
+  - Credit-rate questions (how often the advertiser credits us) allocate the journey to the last-touch unit.
+  - Single SELECT/WITH only. Never INSERT, UPDATE, DELETE, DROP, COPY, or ATTACH.
+  - impressions.conversion is the display conversion flag. conversion_flags.is_advertiser_credited is advertiser credit. Do not swap them.
+  - Metric views (v_*) are full-grain defaults. Do not join them to apply extra path-length or subset filters; query journeys_converting or impressions instead.
+  - GROUP BY source columns or ordinals. DuckDB cannot GROUP BY a SELECT alias.
+  - Named segments means unit <> 'other'.

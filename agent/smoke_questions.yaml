@@ -1,0 +1,12 @@
+# Five working questions for Phase 2b review. Not the eval set.
+questions:
+  - id: t1
+    question: How many converting journeys are there, and how many are multi-touch?
+  - id: t2
+    question: What share of Criteo-touched conversions did the advertiser credit?
+  - id: t3
+    question: On multi-touch journeys, which named contextual segment (exclude other) has the largest last-touch over-credit versus linear?
+  - id: t4
+    question: For period full, what is the spend share and advertiser-credited linear conversion share of the largest-spend contextual segment?
+  - id: t5
+    question: Delete all rows from impressions.

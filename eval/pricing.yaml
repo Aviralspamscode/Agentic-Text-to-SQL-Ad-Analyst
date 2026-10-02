@@ -1,0 +1,10 @@
+# Official prices. Do not guess.
+# gpt-4o-mini: https://developers.openai.com/api/docs/models/gpt-4o-mini
+#   Input $0.15 / 1M, output $0.60 / 1M (checked 2026-10-02).
+# USD→INR: ECB via Frankfurter, 2026-10-01 close.
+USD_PER_1M_INPUT_TOKENS: 0.15
+USD_PER_1M_OUTPUT_TOKENS: 0.60
+USD_TO_INR: 96.33
+# gpt-4o: https://developers.openai.com/api/docs/models/gpt-4o (checked 2026-10-02)
+GPT4O_USD_PER_1M_INPUT_TOKENS: 2.50
+GPT4O_USD_PER_1M_OUTPUT_TOKENS: 10.00

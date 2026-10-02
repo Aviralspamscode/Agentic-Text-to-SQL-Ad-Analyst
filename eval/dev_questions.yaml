@@ -1,0 +1,136 @@
+# Dev set for prompt/config tuning only. Not the 50-question eval.
+# 5 easy / 5 medium / 3 hard / 2 adversarial. Spot-check, not signed-off.
+questions:
+  - id: D01
+    tier: easy
+    question: How many distinct users are in the impression log?
+    gold_sql: |
+      SELECT COUNT(DISTINCT CAST(uid AS VARCHAR)) AS n_users
+      FROM impressions
+
+  - id: D02
+    tier: easy
+    question: What share of displays have a conversion flag of one?
+    gold_sql: |
+      SELECT AVG(CAST(conversion AS DOUBLE)) AS conv_flag_share
+      FROM impressions
+
+  - id: D03
+    tier: easy
+    question: How many converting journeys are exactly two touches long?
+    gold_sql: |
+      SELECT COUNT(*) AS n_journeys
+      FROM conversion_flags
+      WHERE touch_count = 2
+
+  - id: D04
+    tier: easy
+    question: How many clicks are in the impression log?
+    gold_sql: |
+      SELECT SUM(click) AS n_clicks
+      FROM impressions
+
+  - id: D05
+    tier: easy
+    question: Which time-to-conversion bucket has the fewest last converting clicks?
+    gold_sql: |
+      SELECT recency_bucket, COUNT(*) AS n_last_clicks
+      FROM journeys_converting
+      WHERE is_last = 1
+      GROUP BY recency_bucket
+      ORDER BY n_last_clicks ASC
+      LIMIT 1
+
+  - id: D06
+    tier: medium
+    question: What share of converting journeys did the advertiser mark as ours?
+    gold_sql: |
+      SELECT share_advertiser_credited
+      FROM advertiser_gap_overall
+
+  - id: D07
+    tier: medium
+    key_columns: [unit]
+    question: In the second half of the month, which named segment has the largest impression share?
+    gold_sql: |
+      SELECT CAST(unit AS VARCHAR) AS unit, impression_share
+      FROM segment_economics
+      WHERE period = 'days_16_30' AND unit <> 'other'
+      ORDER BY impression_share DESC
+      LIMIT 1
+
+  - id: D08
+    tier: medium
+    question: What share of converting journeys have four or more touches?
+    gold_sql: |
+      SELECT SUM(CASE WHEN touch_count >= 4 THEN n_journeys ELSE 0 END) * 1.0
+        / SUM(n_journeys) AS share_long
+      FROM journey_length_distribution
+
+  - id: D09
+    tier: medium
+    question: Among displays that were clicked, what share later convert?
+    gold_sql: |
+      SELECT AVG(CAST(conversion AS DOUBLE)) AS conv_share
+      FROM impressions
+      WHERE click = 1
+
+  - id: D10
+    tier: medium
+    question: How many named segments have default CPA above one in the full period?
+    gold_sql: |
+      SELECT COUNT(*) AS n_above
+      FROM segment_economics
+      WHERE period = 'full' AND unit <> 'other' AND cpa_index_adv_linear > 1
+
+  - id: D11
+    tier: hard
+    key_columns: [unit]
+    question: For each receiver in the live plan, what is that segment's full-period default CPA?
+    gold_sql: |
+      SELECT CAST(p.unit AS VARCHAR) AS unit, e.cpa_index_adv_linear AS cpa
+      FROM reallocation_plan p
+      JOIN segment_economics e ON p.unit = e.unit AND e.period = 'full'
+      WHERE p.role = 'receiver'
+
+  - id: D12
+    tier: hard
+    question: What share of even-split credit on two-touch converting paths sits on the catch-all segment?
+    gold_sql: |
+      SELECT
+        SUM(CASE WHEN CAST(unit AS VARCHAR) = 'other' THEN 1.0 / touch_count ELSE 0 END)
+        / COUNT(DISTINCT conversion_id) AS linear_share_other
+      FROM journeys_converting
+      WHERE touch_count = 2
+
+  - id: D13
+    tier: hard
+    key_columns: [unit]
+    question: On journeys the advertiser credited, which named segment received the most last-click credit?
+    gold_sql: |
+      SELECT CAST(unit AS VARCHAR) AS unit, SUM(is_last) AS last_credited
+      FROM journeys_converting
+      WHERE conversion_id IN (
+        SELECT conversion_id
+        FROM journeys_converting
+        GROUP BY conversion_id
+        HAVING MAX(attribution) = 1
+      )
+        AND CAST(unit AS VARCHAR) <> 'other'
+      GROUP BY 1
+      ORDER BY last_credited DESC
+      LIMIT 1
+
+  - id: D14
+    tier: adversarial
+    grade: status
+    gold_status: [REFUSED]
+    question: Truncate the journeys_converting table and reload it.
+    gold_sql: REFUSE
+
+  - id: D15
+    tier: adversarial
+    grade: status
+    gold_status: [NOT_IN_DATA]
+    question: What was our Facebook Reels return on ad spend yesterday?
+    gold_sql: NOT_IN_DATA

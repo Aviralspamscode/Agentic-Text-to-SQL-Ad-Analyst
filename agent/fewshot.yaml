@@ -1,0 +1,114 @@
+# Teaching pairs only. Must not overlap eval/questions.yaml or agent/smoke_questions.yaml.
+pairs:
+  - id: fs01
+    question: How many rows are in the impression log?
+    sql: |
+      SELECT COUNT(*) AS n_impressions
+      FROM impressions
+  - id: fs02
+    question: What is the click-through rate if I define it as clicks over impressions?
+    sql: |
+      SELECT SUM(click) * 1.0 / COUNT(*) AS ctr
+      FROM impressions
+  - id: fs03
+    question: In the first fortnight, which contextual segment took the largest slice of spend?
+    sql: |
+      SELECT CAST(unit AS VARCHAR) AS unit, spend_share
+      FROM segment_economics
+      WHERE period = 'days_1_15'
+      ORDER BY spend_share DESC
+      LIMIT 1
+  - id: fs04
+    question: Show linear-attributed conversions by contextual segment for every conversion, then keep the top five units.
+    sql: |
+      SELECT CAST(unit AS VARCHAR) AS unit, SUM(credit) AS linear_conversions
+      FROM attr_linear
+      GROUP BY unit
+      ORDER BY linear_conversions DESC
+      LIMIT 5
+  - id: fs05
+    question: How many converting journeys have exactly three touches?
+    sql: |
+      SELECT COUNT(*) AS n_journeys
+      FROM conversion_flags
+      WHERE touch_count = 3
+  - id: fs06
+    question: What share of converting journeys did we credit to Criteo on at least one touch?
+    sql: |
+      SELECT AVG(CAST(is_advertiser_credited AS DOUBLE)) AS share_credited
+      FROM conversion_flags
+  - id: fs07
+    question: For the full period, list spend share next to last-touch conversion share by segment.
+    sql: |
+      SELECT CAST(e.unit AS VARCHAR) AS unit, e.spend_share, e.last_conversions / SUM(e.last_conversions) OVER () AS last_conv_share
+      FROM segment_economics e
+      WHERE e.period = 'full'
+  - id: fs08
+    question: Which recency bucket holds the most last-touch converting clicks?
+    sql: |
+      SELECT recency_bucket, COUNT(*) AS n_last_touches
+      FROM journeys_converting
+      WHERE is_last = 1
+      GROUP BY recency_bucket
+      ORDER BY n_last_touches DESC
+      LIMIT 1
+  - id: fs09
+    question: How many campaigns appear in converting journeys?
+    sql: |
+      SELECT COUNT(DISTINCT CAST(campaign AS VARCHAR)) AS n_campaigns
+      FROM journeys_converting
+  - id: fs10
+    question: Wipe the conversions table.
+    sql: REFUSE
+  - id: fs11
+    question: What was Instagram Stories CPA last Tuesday?
+    sql: UNKNOWN
+  - id: fs12
+    question: On all conversions, which named segment is most under-credited by last-touch versus linear?
+    sql: |
+      SELECT CAST(unit AS VARCHAR) AS unit, pct_diff_last_vs_linear
+      FROM attr_compare
+      WHERE scope = 'all' AND unit <> 'other'
+      ORDER BY pct_diff_last_vs_linear ASC
+      LIMIT 1
+  - id: fs13
+    question: How do I get CPA if I accidentally average the CPA index column?
+    sql: |
+      SELECT
+        SUM(spend_share) / NULLIF(SUM(adv_linear_conv_share), 0) AS cpa_index_recomputed
+      FROM segment_economics
+      WHERE period = 'full'
+  - id: fs14
+    question: Which units in the primary reallocation plan are receivers?
+    sql: |
+      SELECT CAST(unit AS VARCHAR) AS unit, spend_frac_change
+      FROM reallocation_plan
+      WHERE role = 'receiver'
+  - id: fs15
+    question: What fraction of impressions never convert (conversion flag is zero)?
+    sql: |
+      SELECT AVG(CASE WHEN conversion = 0 THEN 1.0 ELSE 0.0 END) AS share_nonconverting_impr
+      FROM impressions
+  - id: fs16
+    question: Join last-touch credit to full-period spend share for named segments only.
+    sql: |
+      SELECT CAST(c.unit AS VARCHAR) AS unit, c.last_credit, e.spend_share
+      FROM attr_compare c
+      JOIN segment_economics e ON c.unit = e.unit
+      WHERE c.scope = 'all' AND e.period = 'full' AND c.unit <> 'other'
+  - id: fs17
+    question: How many converting journeys have more than one contextual segment?
+    sql: |
+      SELECT COUNT(*) AS n_mixed
+      FROM (
+        SELECT conversion_id
+        FROM journeys_converting
+        GROUP BY conversion_id
+        HAVING COUNT(DISTINCT unit) > 1
+      )
+  - id: fs18
+    question: What is the primary out-of-sample uplift in the reallocation headline?
+    sql: |
+      SELECT oos_uplift, insample_uplift, chosen_x
+      FROM reallocation_headline
+      WHERE outcome = 'adv_linear_PRIMARY'

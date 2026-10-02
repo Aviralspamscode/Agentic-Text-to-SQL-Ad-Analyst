@@ -1,0 +1,14 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+warehouse.duckdb
+warehouse.duckdb.wal
+data/raw/*.gz
+data/raw/*.zip
+data/raw/*.tsv
+data/raw/*.csv
+.python-version
+.duckdb_tmp/
