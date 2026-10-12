@@ -53,17 +53,23 @@ The harness does **not** embed the question or the SQL. Gold is **executed SQL**
 
 Token **Jaccard** is only for few-shot leakage (eval question vs teaching pool; max 0.444). It is not the accuracy metric.
 
-## Reproduce
+## Run the UI and backend
 
-Build `warehouse.duckdb` with the sister repo (or copy that file here), then:
+There is no separate API process. **Streamlit is the UI**; each question runs the LangGraph agent (retrieve → SQL → sqlglot → read-only DuckDB → repair → answer) inside that same process. Default graph is config D.
 
 ```bash
 uv sync
 cp .env.example .env          # LLM_PROVIDER=openai  LLM_MODEL=gpt-4o-mini  API_KEY=...
+# warehouse.duckdb from the sister repo, then:
 uv run python -c "import duckdb; duckdb.connect('warehouse.duckdb').execute(open('sql/10_metric_views.sql').read())"
 uv run streamlit run app/streamlit_app.py
-uv run pytest
 ```
+
+Opens at [http://localhost:8501](http://localhost:8501). The sidebar shows latency and LLM ₹/query (token prices, not media spend).
+
+## Reproduce
+
+Build `warehouse.duckdb` with the sister repo (or copy that file here), then follow **Run the UI and backend** above. Tests: `uv run pytest`.
 
 Logged eval (do not re-run unless you have signed off gold SQL): `eval/results/eval.jsonl` and `eval/results/summary.md`. Re-score only: `uv run python -m eval.rescore`.
 
