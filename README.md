@@ -27,6 +27,32 @@ flowchart LR
 
 Default graph is **config D** (calibrated refusal rules + few-shot). E/F add a plan node and metric views (`sql/10_metric_views.sql`).
 
+## Configs A–F
+
+Same 50 questions, same DuckDB warehouse, GPT-4o-mini unless noted. Each config adds one layer.
+
+| Config | What the model sees | Result (3 runs, after grader audit) |
+| --- | --- | --- |
+| **A** | Table names and column types only | 42.0% |
+| **B** | A + semantic layer (grain, metric definitions, pitfalls) | 39.3% |
+| **C** | B + 3 nearest few-shot question→SQL pairs | 49.3% |
+| **D** | C + calibrated rules (refuse writes only; defaults beat ambiguity). **Resume primary.** | **52.0%**, ₹0.046/query |
+| **E** | D + default metric views (`v_*`) + a plan node before SQL | 39.3% (views joined onto subset questions) |
+| **F** | E’s graph with **GPT-4o** | 61.3%, ₹1.17/query |
+
+## How gold is scored (not cosine)
+
+The harness does **not** embed the question or the SQL. Gold is **executed SQL**. Predicted query and gold query both run on DuckDB; [`eval/compare.py`](eval/compare.py) compares the **result tables**:
+
+- Same row count. Extra predicted columns are allowed; missing gold columns fail.
+- Column **names** need not match (permutations of pred columns vs gold).
+- Numbers: relative tolerance **1e-6**, or share vs percent (0.36 ≡ 36).
+- Labels compared as strings. Order only if the question uses most / least / cheapest / top / …
+- **`key_columns`:** a “which segment” item is graded on `unit` only.
+- Adversarial items pass on **status** (`REFUSED`, `NOT_IN_DATA`, …), not on a table. `ANSWERED` on “which is best?” needs a named **assumption**.
+
+Token **Jaccard** is only for few-shot leakage (eval question vs teaching pool; max 0.444). It is not the accuracy metric.
+
 ## Reproduce
 
 Build `warehouse.duckdb` with the sister repo (or copy that file here), then:
